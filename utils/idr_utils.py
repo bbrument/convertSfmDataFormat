@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 import random
 
-from utils.utils import load_image, save_image
+from utils.utils import load_image, save_image, save_mask, get_view_parameters, _cv_to_gl, _gl_to_cv
 
 def load_K_Rt_from_P(P):
     out = cv2.decomposeProjectionMatrix(P)
@@ -21,7 +21,7 @@ def load_K_Rt_from_P(P):
 
     return intrinsics, pose
 
-def getIntrinsicId(intrinsic_data, intrinsics_data):
+def get_intrinsic_id(intrinsic_data, intrinsics_data):
     thr = 1e-2
     for intrinsicId, intrinsic in intrinsics_data.items():
         if "pxFocalLength" in intrinsic_data and "pxFocalLength" in intrinsic:
@@ -48,7 +48,7 @@ def getIntrinsicId(intrinsic_data, intrinsics_data):
     intrinsicId = intrinsic_data["intrinsicId"]
     return intrinsicId
 
-def getPoseId(pose_data, poses_data):
+def get_pose_id(pose_data, poses_data):
     thr = 1e-2
     for poseId, pose in poses_data.items():
         if np.allclose(np.array(pose_data["pose"]["transform"]["rotation"], dtype=np.float32), np.array(pose["pose"]["transform"]["rotation"], dtype=np.float32), rtol=thr) and \
@@ -73,6 +73,12 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
     image_extension = os.path.splitext(os.listdir(image_folder)[0])[1]
     image_paths = sorted([os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.endswith(image_extension)])
     n_images = len(image_paths)
+
+    # Get mask paths
+    mask_extension = os.path.splitext(os.listdir(mask_folder)[0])[1]
+    mask_paths = sorted([os.path.join(mask_folder, f) for f in os.listdir(mask_folder) if f.endswith(mask_extension)])
+    if len(mask_paths) != n_images:
+        mask_paths = [None for _ in range(n_images)]
 
     # Load camera data 
     camera_dict = np.load(camera_path)
@@ -100,10 +106,11 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
         # Get width, height
         width = image.shape[1]
         height = image.shape[0]
-        if width/height == 4/3:
+        print(f"Image {i+1}/{n_images}: {image_path} ({width}x{height})")
+        if abs(width/height - 4/3) < 0.01:
             sensor_width = 6.4
             sensor_height = 4.8
-        elif width/height == 3/2:
+        elif abs(width/height - 3/2) < 0.01:
             sensor_width = 36
             sensor_height = 24
         else:
@@ -112,6 +119,7 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
         # Get pose and intrinsics data
         P = world_mat @ scale_mat
         intrinsics, pose = load_K_Rt_from_P(P[:3,:4])
+        pose = _cv_to_gl(pose)
 
         # Get focal and principal point
         focal_px = float(intrinsics[0, 0])
@@ -122,9 +130,6 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
         ppy = float(intrinsics[1, 2])
         cx = ppx - width / 2
         cy = ppy - height / 2
-
-        # Get orientation and center of the camera
-        pose[1:3, :] *= -1 # flip y and z axis because Meshroom uses GL coordinates (CV to GL)
 
         # Set intrinsic and pose data
         intrinsic_data = {
@@ -161,13 +166,17 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
                 "transform": {
                     "rotation": [f"{x:0.20f}" for x in pose[:3,:3].ravel().tolist()],
                     "center": [f"{x:0.20f}" for x in pose[:3,3].tolist()]
+                },
+                "scale": {
+                    "scaleBol": use_scale_matrix,
+                    "scaleMat": [f"{x:0.20f}" for x in scale_mat[:3,:4].ravel().tolist()]
                 }
             }
         }
 
         # Check if intrinsic and pose data already exist
-        intrinsicId = getIntrinsicId(intrinsic_data, intrinsics_data)
-        poseId = getPoseId(pose_data, poses_data)
+        intrinsicId = get_intrinsic_id(intrinsic_data, intrinsics_data)
+        poseId = get_pose_id(pose_data, poses_data)
 
         # Update intrinsic and pose ids
         intrinsic_data["intrinsicId"] = intrinsicId
@@ -183,7 +192,8 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
             "path": image_path,
             "width": f"{width:0.0f}",
             "height": f"{height:0.0f}",
-            "metadata" : ""
+            "metadata" : "",
+            "maskPath": mask_paths[i],
         }
 
         # Add data to dictionaries
@@ -193,67 +203,46 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
 
     return views_data, intrinsics_data, poses_data
 
-def write_idr_data(views_data, intrinsics_data, poses_data, save_path):
+def write_idr_data(views_data, intrinsics_data, poses_data, save_path, bit_depth=16):
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
     idr_dict = {}
     for i, (view_id, view_data) in enumerate(views_data.items()):
-        
-        # Get intrinsic and pose
-        intrinsic_data = intrinsics_data[view_data["intrinsicId"]]
-        pose_data = poses_data[view_data["poseId"]]
 
-        # Get width, height
-        width = float(intrinsic_data['width'])
-        height = float(intrinsic_data['height'])
+        # Get view parameters
+        K, c2w_gl, _ = get_view_parameters(view_data, intrinsics_data, poses_data)
+        c2w_cv = _gl_to_cv(c2w_gl)
 
-        # Get focal length
-        if 'pxFocalLength' in intrinsic_data:
-            fx = float(intrinsic_data['pxFocalLength'][0])
-            fy = float(intrinsic_data['pxFocalLength'][1])
-        else:
-            sensor_width = float(intrinsic_data['sensorWidth'])
-            sensor_height = float(intrinsic_data['sensorHeight'])
-            focal_length = float(intrinsic_data['focalLength'])
-            fx = focal_length * width / sensor_width
-            fy = focal_length * height / sensor_height
-
-        # Get principal point
-        cx = width / 2 + float(intrinsic_data['principalPoint'][0])
-        cy = height / 2 + float(intrinsic_data['principalPoint'][1])
-
-        # Get intrinsics matrix
-        K = np.array([[fx, 0, cx, 0], [0, fy, cy, 0], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=np.float32)
-
-        # Get rotation matrix and center
-        R_c2w = np.array(pose_data['pose']['transform']['rotation'], dtype=np.float32).reshape([3,3]) # orientation
-        center = np.expand_dims(np.array(pose_data['pose']['transform']['center'], dtype=np.float32), axis=1) # center
-        Rt_c2w = np.eye(4)
-        Rt_c2w[:3,:3] = R_c2w
-        Rt_c2w[:3,3] = center[:,0]
-        Rt_c2w[1:3, :] *= -1 # flip y and z axis because Meshroom uses GL coordinates (GL to CV)
-        idr_dict['world_mat_%d'%i] = K @ np.linalg.inv(Rt_c2w)
+        # Save projection matrix
+        idr_dict['world_mat_%d'%i] = K @ np.linalg.inv(c2w_cv)
 
         # Load image
         image_path = view_data["path"]
         undisto_image_path = view_data.get("undistortedImagePath", None)
         if undisto_image_path is not None:
-            image = load_image(undisto_image_path)
-        else:
-            image = load_image(image_path)
+            image_path = undisto_image_path    
+        image = load_image(image_path)
 
-        # Save image and mask
+        # Save image
         output_image_path = os.path.join(save_path, "image")
         if not os.path.exists(output_image_path):
             os.makedirs(output_image_path)
-        save_image(image[:, :, :3], os.path.join(output_image_path, f"{i:08d}.png"), bit_depth=16)
-        if image.shape[-1] == 4:
-            output_mask_path = os.path.join(save_path, "mask")
-            if not os.path.exists(output_mask_path):
-                os.makedirs(output_mask_path)
-            cv2.imwrite(os.path.join(output_mask_path, f"{i:08d}.png"), (image[:, :, 3]*255).astype(np.uint8))
+        save_image(image[:, :, :3], os.path.join(output_image_path, f"{i:08d}.png"), bit_depth=bit_depth)
+
+        # Save mask
+        mask_path = view_data.get("maskPath", None)
+        output_mask_path = os.path.join(save_path, "mask")
+        if not os.path.exists(output_mask_path):
+            os.makedirs(output_mask_path)
+        if mask_path is not None:
+            mask = (load_image(mask_path)[:,:,0] > 0.5).astype(np.float32)
+        elif image.shape[-1] == 4:
+            mask = (image[:, :, 3] > 0.5).astype(np.float32)
+        else:
+            mask = np.ones((image.shape[0], image.shape[1]), dtype=np.float32)
+        save_mask(mask, os.path.join(output_mask_path, f"{i:08d}.png"))
 
     # Save npz file
     output_npz_path = os.path.join(save_path, "cameras.npz")
