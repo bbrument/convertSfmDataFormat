@@ -182,7 +182,7 @@ def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path
         "sphere_radius": 1.,
     })
 
-    file_path = os.path.join(output_path, 'transforms_neuralangelo.json')
+    file_path = os.path.join(output_path, 'transforms.json')
     with open(file_path, "w", encoding="utf-8") as outputfile:
         json.dump(out, outputfile, indent=4)
     print('Writing data to json file: ', file_path)
