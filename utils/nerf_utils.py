@@ -65,11 +65,12 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
         
         # Get view parameters
         K, c2w_gl, _ = get_view_parameters(view_data, intrinsics_data, poses_data)
+        c2w_cv = _gl_to_cv(c2w_gl)
 
         # Add frame to output
         frame = {}
         frame["file_path"] = os.path.join(images_dir, image_name)
-        frame["transform_matrix"] = c2w_gl.tolist()
+        frame["transform_matrix"] = c2w_cv.tolist()
         frame["intrinsic_matrix"] = K.tolist()
         out["frames"].append(frame)
 
@@ -80,12 +81,20 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
         "h": int(h),
     })
 
+    pose_data = poses_data[list(poses_data.keys())[0]]
+    if "scaleBol" in pose_data["pose"]["scale"]:
+        if pose_data["pose"]["scale"]["scaleBol"] == True:
+            scale_mat = np.array(pose_data["pose"]["scale"]["scaleMat"], dtype=np.float32).reshape([3,4])
+            scale_mat = np.concatenate([scale_mat, np.array([[0,0,0,1]], dtype=np.float32)], axis=0)
+            out.update({
+                'n2w': scale_mat.tolist()
+            })
+
     # Write data to json file
     file_path = os.path.join(output_path, 'transforms.json')
     with open(file_path, "w", encoding="utf-8") as outputfile:
         json.dump(out, outputfile, indent=4)
     print('Writing data to json file: ', file_path)
-
 
 def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True):
     """
