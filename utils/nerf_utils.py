@@ -90,6 +90,9 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
 
     # Get width and height
     w, h = float(view_data["width"]), float(view_data["height"])
+    if downscale_factor is not None:
+        w = w // downscale_factor
+        h = h // downscale_factor
     out.update({
         "w": int(w),
         "h": int(h),
@@ -187,6 +190,9 @@ def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path
     sk_x = float(K[0][1])
     sk_y = float(K[1][0])
     w, h = float(view_data["width"]), float(view_data["height"])
+    if downscale_factor is not None:
+        w = w // downscale_factor
+        h = h // downscale_factor
 
     angle_x = math.atan(w / (fl_x * 2)) * 2
     angle_y = math.atan(h / (fl_y * 2)) * 2
