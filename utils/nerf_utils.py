@@ -3,17 +3,18 @@ import numpy as np
 import json
 import shutil
 import math
+import cv2
 
 from utils.utils import load_image, save_image, get_view_parameters, _cv_to_gl, _gl_to_cv
 
-def write_nerf_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16):
+def write_nerf_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True, downscale_factor=None):
     """
     Write NeRF .json file.
     Inspired by
     """
     return 0
 
-def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True):
+def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True, downscale_factor=None):
     """
     Write NeuS2 .json file.
     Inspired by https://github.com/19reborn/NeuS2/blob/main/tools/data_format_from_neus.py
@@ -22,6 +23,8 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
     # Create output directory
     images_dir = "image_masked"
     output_images_path = os.path.join(output_path, images_dir)
+    if not os.path.exists(output_images_path):
+        os.makedirs(output_images_path)
 
     # Create output object
     out = {
@@ -59,6 +62,10 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
                 image = np.concatenate([image, mask[...,np.newaxis]], axis=-1)
             elif image.shape[-1] == 4:
                 image[:,:,-1] = (image[:,:,-1] > 0.5).astype(np.float32) * mask
+
+            if downscale_factor is not None:
+                image = cv2.resize(image, (image.shape[1]//downscale_factor, image.shape[0]//downscale_factor))
+
             save_image(image, os.path.join(output_images_path, image_name), bit_depth=bit_depth)
         else:
             images_dir = os.path.relpath(os.path.dirname(image_path), output_path)
@@ -66,6 +73,13 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
         # Get view parameters
         K, c2w_gl, _ = get_view_parameters(view_data, intrinsics_data, poses_data)
         c2w_cv = _gl_to_cv(c2w_gl)
+
+        # Downscale intrinsics
+        if downscale_factor is not None:
+            K[0, 0] /= downscale_factor
+            K[1, 1] /= downscale_factor
+            K[0, 2] /= downscale_factor
+            K[1, 2] /= downscale_factor
 
         # Add frame to output
         frame = {}
@@ -96,7 +110,7 @@ def write_neus2_data(views_data, intrinsics_data, poses_data, output_path, bit_d
         json.dump(out, outputfile, indent=4)
     print('Writing data to json file: ', file_path)
 
-def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True):
+def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path, bit_depth=16, copy_images=True, downscale_factor=None):
     """
     Write NeuralAngelo .json file.
     Inspired by https://github.com/NVlabs/neuralangelo/blob/main/projects/neuralangelo/scripts/convert_dtu_to_json.py
@@ -141,12 +155,23 @@ def write_neuralangelo_data(views_data, intrinsics_data, poses_data, output_path
                 image = np.concatenate([image, mask[...,np.newaxis]], axis=-1)
             elif image.shape[-1] == 4:
                 image[:,:,-1] = (image[:,:,-1] > 0.5).astype(np.float32) * mask
+
+            if downscale_factor is not None:
+                image = cv2.resize(image, (image.shape[1]//downscale_factor, image.shape[0]//downscale_factor))
+
             save_image(image, os.path.join(output_images_path, image_name), bit_depth=bit_depth)
         else:
             images_dir = os.path.relpath(os.path.dirname(image_path), output_path)
         
         # Get view parameters
         K, c2w_gl, _ = get_view_parameters(view_data, intrinsics_data, poses_data)
+
+        # Downscale intrinsics
+        if downscale_factor is not None:
+            K[0, 0] /= downscale_factor
+            K[1, 1] /= downscale_factor
+            K[0, 2] /= downscale_factor
+            K[1, 2] /= downscale_factor
 
         # Add frame to output
         frame = {}

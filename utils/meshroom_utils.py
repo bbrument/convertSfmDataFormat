@@ -49,11 +49,14 @@ def read_cameras_sfm(cameras_sfm_path, undisto_images_folder=None, masks_folder=
         views_data[view['viewId']] = view
 
         # Check if undistorted image exists
-        if all_undisto_paths is not None:
-            for undisto_path in all_undisto_paths:
-                if image_name.lower() in undisto_path.lower() or view_id in undisto_path.lower():
-                    view['undistortedImagePath'] = os.path.join(undisto_images_folder, undisto_path)
-                    break
+        if undisto_images_folder is not None:
+            if all_undisto_paths is not None:
+                for undisto_path in all_undisto_paths:
+                    if image_name.lower() in undisto_path.lower() or view_id in undisto_path.lower():
+                        view['undistortedImagePath'] = os.path.join(undisto_images_folder, undisto_path)
+                        break
+            else:
+                view['undistortedImagePath'] = None
         else:
             view['undistortedImagePath'] = None
 
@@ -132,23 +135,29 @@ def read_meshroom_project(meshroom_project_path, cameras_sfm_path=None, masks_fo
     print(f"Found {len(views_data)} views.")
     return views_data, intrinsics_data, poses_data, all_rest_data
 
-def write_cameras_sfm(views_data, intrinsics_data, poses_data, all_rest_data, cameras_sfm_path):
+def write_cameras_sfm(cameras_sfm_path, views_data, intrinsics_data, poses_data, all_rest_data=None):
     
     # Initialize cameras_sfm
     cameras_sfm = {}
-    for i, data in enumerate(all_rest_data[:3]):
-        if data is not None:
-            if i == 0:
-                cameras_sfm['version'] = data
-            elif i == 1:
-                cameras_sfm['featuresFolders'] = data
-            elif i == 2:
-                cameras_sfm['matchesFolders'] = data
-    cameras_sfm['views'] = []
-    cameras_sfm['intrinsics'] = []
-    cameras_sfm['poses'] = []
-    if all_rest_data[3] is not None:
-        cameras_sfm['structure'] = all_rest_data[3]
+    if all_rest_data is not None:
+        for i, data in enumerate(all_rest_data[:3]):
+            if data is not None:
+                if i == 0:
+                    cameras_sfm['version'] = data
+                elif i == 1:
+                    cameras_sfm['featuresFolders'] = data
+                elif i == 2:
+                    cameras_sfm['matchesFolders'] = data
+        cameras_sfm['views'] = []
+        cameras_sfm['intrinsics'] = []
+        cameras_sfm['poses'] = []
+        if all_rest_data[3] is not None:
+            cameras_sfm['structure'] = all_rest_data[3]
+    else:
+        cameras_sfm['version'] = ['1','2','8']
+        cameras_sfm['views'] = []
+        cameras_sfm['intrinsics'] = []
+        cameras_sfm['poses'] = []
 
     # Write views, intrinsics and poses data
     for view_id, view_data in views_data.items():

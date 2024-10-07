@@ -2,12 +2,12 @@ import argparse
 import os
 import shutil
 
-from utils.meshroom_utils import read_meshroom_project, write_cameras_sfm
+from utils.meshroom_utils import read_meshroom_project, read_cameras_sfm
 from utils.idr_utils import write_idr_data
 
 def parse_args():
     parser = argparse.ArgumentParser(description="convert a meshroom sfm data file to idr format")
-    parser.add_argument("--meshroom_project", default="something.mg", help="input path of the .mg file")
+    parser.add_argument("--meshroom_project", default=None, help="input path of the .mg file")
     parser.add_argument("--cameras_sfm", default=None, help="input path of the cameras.sfm file")
     parser.add_argument("--mask_folder", default=None, help="mask folder")
     parser.add_argument("--output_path", default=None, help="output path")
@@ -32,7 +32,10 @@ if __name__ == "__main__":
         shutil.rmtree(OUTPUT_PATH)
 
     # Read meshroom project
-    views_data, intrinsics_data, poses_data, all_rest_data = read_meshroom_project(MESHROOM_PROJECT_PATH, cameras_sfm_path=CAMERAS_SFM_PATH, masks_folder=MASK_FOLDER)
+    if MESHROOM_PROJECT_PATH is not None:
+        views_data, intrinsics_data, poses_data, all_rest_data = read_meshroom_project(MESHROOM_PROJECT_PATH, cameras_sfm_path=CAMERAS_SFM_PATH, masks_folder=MASK_FOLDER)
+    elif CAMERAS_SFM_PATH is not None:
+        views_data, intrinsics_data, poses_data, all_rest_data = read_cameras_sfm(CAMERAS_SFM_PATH, masks_folder=MASK_FOLDER)
 
     # Output images and camera parameters in the IDR format
     write_idr_data(views_data, intrinsics_data, poses_data, OUTPUT_PATH, bit_depth=BIT_DEPTH)
