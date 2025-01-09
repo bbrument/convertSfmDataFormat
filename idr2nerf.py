@@ -13,6 +13,7 @@ def parse_args():
     parser.add_argument("--bit_depth", default=16, type=int, help="Bit depth of the images.")
     parser.add_argument("--copy_images", action="store_true", help="Copy images to the output folder.")
     parser.add_argument("--downscale_factor", default=None, type=int, help="Downscale factor of the images.")
+    ## python idr2nerf.py --idr_folder_path data/ --output_format neuralangelo --output_path data/nerf/ --use-scale-matrix --bit_depth 16 --copy_images --downscale_factor 2
     args = parser.parse_args()
     return args
 

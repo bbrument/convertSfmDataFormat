@@ -114,7 +114,9 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
             sensor_width = 36
             sensor_height = 24
         else:
-            raise ValueError("Image aspect ratio is not 4:3 or 3:2")
+            # raise ValueError("Image aspect ratio is not 4:3 or 3:2")
+            sensor_width = 36
+            sensor_height = 24
 
         # Get pose and intrinsics data
         P = world_mat @ scale_mat
@@ -141,9 +143,9 @@ def read_idr_data(idr_folder_path, use_scale_matrix=False):
             "serialNumber": "-1",
             "type": "pinhole",
             "initializationMode": "unknown",
-            # "pxFocalLength": [f"{focal_px:0.20f}",
-            #                 f"{focal_py:0.20f}"
-            #                 ],
+            "pxFocalLength": [f"{focal_px:0.20f}",
+                            f"{focal_py:0.20f}"
+                            ],
             # "pxInitialFocalLength": "-1",
             "focalLength": f"{focal_px_mm:0.20f}",
             "initialFocalLength": "-1",
